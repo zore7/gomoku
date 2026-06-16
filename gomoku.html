@@ -1,0 +1,773 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>五子棋</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @font-face {
+    font-family: "SerifJP";
+    src: local("Noto Serif CJK SC"), local("Source Han Serif SC"), local("SimSun"), local("serif");
+  }
+
+  :root {
+    --wood: #d4a574;
+    --wood-dark: #b8875a;
+    --wood-light: #e8c9a0;
+    --paper: #f5f0e8;
+    --ink: #2a241e;
+    --ink-light: #5c5347;
+    --accent: #8b4513;
+    --bg: #1e1b18;
+    --panel-bg: #2a2520;
+    --danger: #c0392b;
+    --white-stone: #f0ede5;
+    --black-stone: #1a1a1a;
+    --star-dot: #3a3028;
+    --grid-line: #5a4a38;
+  }
+
+  body {
+    font-family: "SerifJP", "Noto Serif SC", "Source Han Serif SC", serif;
+    background: var(--bg);
+    color: var(--paper);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  /* 容器 */
+  .container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    max-width: 720px;
+    width: 100%;
+  }
+
+  /* 标题 */
+  .title {
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    color: var(--paper);
+    text-align: center;
+    line-height: 1.4;
+  }
+  .title .sub {
+    display: block;
+    font-size: 13px;
+    color: var(--ink-light);
+    letter-spacing: 0.3em;
+    margin-top: 4px;
+  }
+
+  /* 信息栏 */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: var(--panel-bg);
+    border-radius: 8px;
+    padding: 12px 24px;
+    width: 100%;
+    max-width: 520px;
+    justify-content: center;
+  }
+  .player-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    color: var(--ink-light);
+    transition: color 0.3s;
+  }
+  .player-indicator.active { color: var(--paper); }
+  .stone-dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: box-shadow 0.3s, transform 0.3s;
+  }
+  .stone-dot.black { background: radial-gradient(circle at 35% 35%, #555, #111 70%, #000); }
+  .stone-dot.white { background: radial-gradient(circle at 35% 35%, #fff, #e8e0d5 55%, #c8bda8); }
+  .player-indicator.active .stone-dot { transform: scale(1.2); box-shadow: 0 0 12px rgba(255,255,255,0.25); }
+
+  .vs-text {
+    font-size: 13px;
+    color: var(--ink-light);
+    letter-spacing: 0.1em;
+  }
+
+  .mode-badge {
+    font-size: 11px;
+    background: var(--accent);
+    color: var(--paper);
+    padding: 3px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.08em;
+  }
+
+  /* 棋盘容器 */
+  .board-wrapper {
+    position: relative;
+    background: linear-gradient(135deg, var(--wood-dark), var(--wood) 30%, var(--wood-light) 60%, var(--wood));
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.4),
+      0 8px 32px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    border: 2px solid var(--wood-dark);
+  }
+  canvas { display: block; border-radius: 2px; cursor: pointer; }
+
+  /* 控制栏 */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    max-width: 520px;
+    width: 100%;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    padding: 9px 18px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 6px;
+    background: var(--panel-bg);
+    color: var(--paper);
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+    white-space: nowrap;
+  }
+  button:hover { background: #3a3430; border-color: rgba(255,255,255,0.25); }
+  button:active { background: #1e1b18; }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  button.primary:hover { background: #a0522d; }
+
+  button.danger { color: var(--danger); }
+  button.danger:hover { background: rgba(192,57,43,0.15); border-color: var(--danger); }
+
+  button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* 难度选择 */
+  .difficulty-group {
+    display: flex;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .difficulty-group button {
+    border-radius: 0;
+    border: none;
+    padding: 9px 14px;
+    font-size: 12px;
+  }
+  .difficulty-group button:not(:last-child) {
+    border-right: 1px solid rgba(255,255,255,0.1);
+  }
+  .difficulty-group button.selected {
+    background: var(--accent);
+    color: var(--paper);
+  }
+
+  /* 胜利弹窗 */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s;
+  }
+  .overlay.show { opacity: 1; pointer-events: auto; }
+
+  .win-dialog {
+    background: var(--panel-bg);
+    border-radius: 12px;
+    padding: 36px 40px 28px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+    transform: translateY(16px);
+    transition: transform 0.35s;
+  }
+  .overlay.show .win-dialog { transform: translateY(0); }
+
+  .win-dialog .winner-icon {
+    display: inline-block;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+  }
+  .win-dialog h2 { font-size: 26px; font-weight: 400; margin-bottom: 6px; letter-spacing: 0.08em; }
+  .win-dialog p { font-size: 14px; color: var(--ink-light); margin-bottom: 22px; }
+
+  .win-dialog button {
+    margin: 0 6px;
+  }
+
+  /* 响应式 */
+  @media (max-width: 600px) {
+    .container { gap: 14px; padding: 10px; }
+    .title { font-size: 22px; }
+    .status-bar { gap: 12px; padding: 10px 16px; }
+    .board-wrapper { padding: 10px; }
+    .controls { gap: 6px; }
+    button { padding: 7px 12px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1 class="title">五 子 棋<span class="sub">GOMOKU</span></h1>
+
+  <div class="status-bar" id="statusBar">
+    <div class="player-indicator active" id="blackIndicator">
+      <span class="stone-dot black"></span>
+      <span>黑方</span>
+    </div>
+    <span class="vs-text">VS</span>
+    <div class="player-indicator" id="whiteIndicator">
+      <span class="stone-dot white"></span>
+      <span>白方</span>
+    </div>
+    <span class="mode-badge" id="modeBadge">双人对战</span>
+  </div>
+
+  <div class="board-wrapper">
+    <canvas id="board"></canvas>
+  </div>
+
+  <div class="controls" id="controls">
+    <button id="btnUndo" disabled>悔棋</button>
+    <button id="btnRestart">重新开始</button>
+    <button id="btnMode">切换 AI 模式</button>
+    <div class="difficulty-group" id="diffGroup" style="display:none">
+      <button data-level="easy">简单</button>
+      <button data-level="medium" class="selected">中等</button>
+      <button data-level="hard">困难</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="win-dialog">
+    <div class="winner-icon" id="winnerDot"></div>
+    <h2 id="winText"></h2>
+    <p id="winSub"></p>
+    <button class="primary" id="btnPlayAgain">再来一局</button>
+    <button id="btnCloseOverlay">关闭</button>
+  </div>
+</div>
+
+
+<script>
+const BOARD_SIZE = 15;
+const CELL_SIZE = 36;
+const PADDING = 28;
+const STONE_RADIUS = CELL_SIZE * 0.43;
+
+let board = [];
+let currentPlayer = 1;
+let history = [];
+let gameOver = false;
+let winner = null;
+let winLine = [];
+let mode = "pvp";
+let aiDifficulty = "medium";
+let aiThinking = false;
+let hoverPos = null;
+
+const canvas = document.getElementById("board");
+const ctx = canvas.getContext("2d");
+const canvasSize = PADDING * 2 + (BOARD_SIZE - 1) * CELL_SIZE;
+canvas.width = canvasSize;
+canvas.height = canvasSize;
+canvas.style.width = canvasSize + "px";
+canvas.style.height = canvasSize + "px";
+
+const blackIndicator = document.getElementById("blackIndicator");
+const whiteIndicator = document.getElementById("whiteIndicator");
+const modeBadge = document.getElementById("modeBadge");
+const btnUndo = document.getElementById("btnUndo");
+const btnMode = document.getElementById("btnMode");
+const diffGroup = document.getElementById("diffGroup");
+const overlay = document.getElementById("overlay");
+const winnerDot = document.getElementById("winnerDot");
+const winText = document.getElementById("winText");
+const winSub = document.getElementById("winSub");
+
+let audioCtx = null;
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playPlace() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(800, t);
+  osc.frequency.exponentialRampToValueAtTime(500, t + 0.08);
+  gain.gain.setValueAtTime(0.12, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.15);
+}
+function playWin() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [523, 659, 784].forEach((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.1, t + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.3);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t + i * 0.12); osc.stop(t + i * 0.12 + 0.3);
+  });
+}
+
+function initBoard() {
+  board = Array.from({length: BOARD_SIZE}, () => Array(BOARD_SIZE).fill(0));
+  currentPlayer = 1;
+  history = [];
+  gameOver = false;
+  winner = null;
+  winLine = [];
+  hoverPos = null;
+  aiThinking = false;
+  updateUI();
+  draw();
+}
+
+function placeStone(row, col) {
+  if (gameOver) return false;
+  if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return false;
+  if (board[row][col] !== 0) return false;
+
+  history.push({row, col, player: currentPlayer});
+  board[row][col] = currentPlayer;
+
+  const result = checkWin(row, col, currentPlayer);
+  if (result) {
+    gameOver = true;
+    winner = currentPlayer;
+    winLine = result;
+    updateUI();
+    draw();
+    setTimeout(() => { showOverlay(); playWin(); }, 400);
+    return true;
+  }
+
+  if (history.length >= BOARD_SIZE * BOARD_SIZE) {
+    gameOver = true;
+    winner = 0;
+    updateUI();
+    draw();
+    setTimeout(showOverlay, 400);
+    return true;
+  }
+
+  currentPlayer = currentPlayer === 1 ? 2 : 1;
+  updateUI();
+  draw();
+  return true;
+}
+
+function checkWin(row, col, player) {
+  const directions = [[0, 1],[1, 0],[1, 1],[1, -1]];
+  for (const [dr, dc] of directions) {
+    let count = 1;
+    let cells = [[row, col]];
+    for (let i = 1; i < 5; i++) {
+      const r = row + dr * i, c = col + dc * i;
+      if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) {
+        count++; cells.push([r, c]);
+      } else break;
+    }
+    for (let i = 1; i < 5; i++) {
+      const r = row - dr * i, c = col - dc * i;
+      if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === player) {
+        count++; cells.unshift([r, c]);
+      } else break;
+    }
+    if (count >= 5) return cells;
+  }
+  return null;
+}
+
+function undo() {
+  if (gameOver) return;
+  if (aiThinking) return;
+  if (mode === "pvp" && history.length === 0) return;
+  if (mode === "ai" && history.length < 2) return;
+  const steps = mode === "ai" ? 2 : 1;
+  for (let i = 0; i < steps && history.length > 0; i++) {
+    const last = history.pop();
+    board[last.row][last.col] = 0;
+  }
+  currentPlayer = mode === "ai" ? 1 : (history.length % 2 === 0 ? 1 : 2);
+  gameOver = false; winner = null; winLine = [];
+  updateUI(); draw();
+}
+
+function evaluatePosition(r, c, player) {
+  const opp = player === 1 ? 2 : 1;
+  const dirs = [[0,1],[1,0],[1,1],[1,-1]];
+  let score = 0;
+
+  for (const [dr, dc] of dirs) {
+    // 收集该方向上 9 格窗口（候选位 + 各向 4 格）
+    const line = [];
+    line.push(1); // 候选位视为当前玩家棋子
+    for (let d = 1; d <= 4; d++) {
+      const nr = r + dr * d, nc = c + dc * d;
+      if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+        const v = board[nr][nc];
+        line.push(v === player ? 1 : v === opp ? 2 : 0);
+      } else {
+        line.push(3); // 墙
+      }
+    }
+    for (let d = 1; d <= 4; d++) {
+      const nr = r - dr * d, nc = c - dc * d;
+      if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+        const v = board[nr][nc];
+        line.unshift(v === player ? 1 : v === opp ? 2 : 0);
+      } else {
+        line.unshift(3);
+      }
+    }
+    // line 长度应为 9，对每个 5 连窗口评分
+    for (let w = 0; w <= 4; w++) {
+      const window = line.slice(w, w + 5);
+      const mine = window.filter(v => v === 1).length;
+      const opps = window.filter(v => v === 2).length;
+      const walls = window.filter(v => v === 3).length;
+      if (opps > 0 || walls > 0) continue; // 被堵或撞墙，该窗口无效
+      if (mine === 5) score += 100000;
+      else if (mine === 4) score += 10000;
+      else if (mine === 3) score += 1000;
+      else if (mine === 2) score += 100;
+      else if (mine === 1) score += 10;
+    }
+  }
+  return score;
+}
+
+function getAIMove() {
+  const nearSet = new Set();
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (board[r][c] !== 0) {
+        for (let dr = -2; dr <= 2; dr++) {
+          for (let dc = -2; dc <= 2; dc++) {
+            const nr = r + dr, nc = c + dc;
+            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE && board[nr][nc] === 0) {
+              nearSet.add(nr * BOARD_SIZE + nc);
+            }
+          }
+        }
+      }
+    }
+  }
+  let cells = [...nearSet];
+  if (cells.length === 0) cells = [7 * BOARD_SIZE + 7];
+
+  const scoredMoves = [];
+  for (const key of cells) {
+    const r = Math.floor(key / BOARD_SIZE), c = key % BOARD_SIZE;
+    if (board[r][c] !== 0) continue;
+    const attackScore = evaluatePosition(r, c, 2);
+    const defenseScore = evaluatePosition(r, c, 1);
+    scoredMoves.push({r, c, score: attackScore + defenseScore * 0.9});
+  }
+  scoredMoves.sort((a, b) => b.score - a.score);
+
+  if (aiDifficulty === "easy") {
+    const top = scoredMoves.slice(0, Math.min(8, scoredMoves.length));
+    return top[Math.floor(Math.random() * top.length)];
+  } else if (aiDifficulty === "medium") {
+    const top = scoredMoves.slice(0, Math.min(3, scoredMoves.length));
+    return top[Math.floor(Math.random() * top.length)];
+  } else {
+    return scoredMoves[0];
+  }
+}
+
+function aiMove() {
+  if (gameOver || currentPlayer !== 2 || mode !== "ai") return;
+  aiThinking = true; updateUI(); draw();
+  const delay = aiDifficulty === "easy" ? 200 : aiDifficulty === "medium" ? 350 : 500;
+  setTimeout(() => {
+    const move = getAIMove();
+    if (move) { placeStone(move.r, move.c); if (!gameOver) playPlace(); }
+    aiThinking = false; updateUI(); draw();
+  }, delay);
+}
+
+function toPixel(index) { return PADDING + index * CELL_SIZE; }
+function fromPixel(px) { return Math.round((px - PADDING) / CELL_SIZE); }
+
+function drawBoardTexture() {
+  const grad = ctx.createLinearGradient(0, 0, canvasSize, canvasSize);
+  grad.addColorStop(0, "#c4956a");
+  grad.addColorStop(0.3, "#dbb88c");
+  grad.addColorStop(0.6, "#e0c098");
+  grad.addColorStop(1, "#c4956a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvasSize, canvasSize);
+  ctx.globalAlpha = 0.06;
+  for (let i = 0; i < canvasSize; i += 5) {
+    ctx.strokeStyle = i % 25 < 12 ? "#000" : "#fff";
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, i + Math.sin(i * 0.1) * 2);
+    ctx.lineTo(canvasSize, i + Math.cos(i * 0.1) * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawGrid() {
+  ctx.strokeStyle = "rgba(60, 35, 20, 0.65)";
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < BOARD_SIZE; i++) {
+    const pos = toPixel(i);
+    ctx.beginPath();
+    ctx.moveTo(toPixel(0), pos);
+    ctx.lineTo(toPixel(BOARD_SIZE - 1), pos);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pos, toPixel(0));
+    ctx.lineTo(pos, toPixel(BOARD_SIZE - 1));
+    ctx.stroke();
+  }
+  const starPoints = [[3,3],[3,7],[3,11],[7,3],[7,7],[7,11],[11,3],[11,7],[11,11]];
+  for (const [r, c] of starPoints) {
+    ctx.fillStyle = "rgba(50, 30, 15, 0.7)";
+    ctx.beginPath();
+    ctx.arc(toPixel(c), toPixel(r), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = "rgba(40, 25, 10, 0.8)";
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(toPixel(0) - 2, toPixel(0) - 2, (BOARD_SIZE - 1) * CELL_SIZE + 4, (BOARD_SIZE - 1) * CELL_SIZE + 4);
+}
+
+function drawStone(r, c, player, alpha, scale) {
+  alpha = alpha || 1; scale = scale || 1;
+  const x = toPixel(c), y = toPixel(r);
+  const r_eff = STONE_RADIUS * scale;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetX = 1.5;
+  ctx.shadowOffsetY = 2;
+
+  if (player === 1) {
+    const grad = ctx.createRadialGradient(x - r_eff * 0.3, y - r_eff * 0.3, r_eff * 0.1, x, y, r_eff);
+    grad.addColorStop(0, "#5a5a5a");
+    grad.addColorStop(0.4, "#2a2a2a");
+    grad.addColorStop(0.75, "#111");
+    grad.addColorStop(1, "#000");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r_eff, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    const hl = ctx.createRadialGradient(x - r_eff * 0.25, y - r_eff * 0.25, r_eff * 0.05, x, y, r_eff);
+    hl.addColorStop(0, "rgba(255,255,255,0.25)");
+    hl.addColorStop(0.6, "rgba(255,255,255,0.03)");
+    hl.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = hl;
+    ctx.beginPath(); ctx.arc(x, y, r_eff, 0, Math.PI * 2); ctx.fill();
+  } else {
+    const grad = ctx.createRadialGradient(x - r_eff * 0.3, y - r_eff * 0.3, r_eff * 0.1, x, y, r_eff);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.35, "#f5f0e8");
+    grad.addColorStop(0.7, "#e0d8c8");
+    grad.addColorStop(1, "#c8bfaa");
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r_eff, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = "rgba(0,0,0,0.12)";
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvasSize, canvasSize);
+  drawBoardTexture();
+  drawGrid();
+
+  const stepMap = new Map();
+  history.forEach((h, i) => stepMap.set(h.row * BOARD_SIZE + h.col, i + 1));
+
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (board[r][c] !== 0) {
+        drawStone(r, c, board[r][c]);
+        const key = r * BOARD_SIZE + c;
+        if (stepMap.get(key) === history.length) {
+          const x = toPixel(c), y = toPixel(r);
+          ctx.fillStyle = "#e74c3c";
+          ctx.beginPath();
+          ctx.arc(x, y, STONE_RADIUS * 0.22, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  if (hoverPos && !gameOver && !aiThinking) {
+    const {r, c} = hoverPos;
+    if (board[r][c] === 0) drawStone(r, c, currentPlayer, 0.4, 1);
+  }
+
+  if (gameOver && winLine.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(200, 50, 40, 0.65)";
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.shadowColor = "rgba(220, 50, 50, 0.5)";
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(toPixel(winLine[0][1]), toPixel(winLine[0][0]));
+    for (let i = 1; i < winLine.length; i++) {
+      ctx.lineTo(toPixel(winLine[i][1]), toPixel(winLine[i][0]));
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function updateUI() {
+  blackIndicator.classList.toggle("active", currentPlayer === 1 && !gameOver);
+  whiteIndicator.classList.toggle("active", currentPlayer === 2 && !gameOver);
+  if (mode === "ai") {
+    modeBadge.textContent = "人机对战 · " + (aiDifficulty === "easy" ? "简单" : aiDifficulty === "medium" ? "中等" : "困难");
+  } else {
+    modeBadge.textContent = "双人对战";
+  }
+  btnUndo.disabled = gameOver || aiThinking || (mode === "pvp" && history.length === 0) || (mode === "ai" && history.length < 2);
+  diffGroup.style.display = mode === "ai" ? "flex" : "none";
+}
+
+function showOverlay() {
+  overlay.classList.add("show");
+  if (winner === 1) {
+    winnerDot.className = "winner-icon";
+    winnerDot.style.background = "radial-gradient(circle at 35% 35%, #555, #111 70%, #000)";
+    winText.textContent = "黑方胜";
+    winSub.textContent = "五子连珠，黑方获胜";
+  } else if (winner === 2) {
+    winnerDot.className = "winner-icon";
+    winnerDot.style.background = "radial-gradient(circle at 35% 35%, #fff, #e8e0d5 55%, #c8bda8)";
+    winText.textContent = "白方胜";
+    winSub.textContent = "五子连珠，白方获胜";
+  } else {
+    winnerDot.className = "winner-icon";
+    winnerDot.style.background = "#888";
+    winText.textContent = "平局";
+    winSub.textContent = "棋盘已满，不分胜负";
+  }
+}
+function hideOverlay() { overlay.classList.remove("show"); }
+
+canvas.addEventListener("click", (e) => {
+  if (gameOver || aiThinking) return;
+  initAudio();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvasSize / rect.width;
+  const scaleY = canvasSize / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const c = fromPixel(mx), r = fromPixel(my);
+  if (r < 0 || r >= BOARD_SIZE || c < 0 || c >= BOARD_SIZE) return;
+  if (board[r][c] !== 0) return;
+  if (mode === "pvp" || currentPlayer === 1) {
+    const placed = placeStone(r, c);
+    if (placed && !gameOver) {
+      playPlace();
+      if (mode === "ai" && currentPlayer === 2) aiMove();
+    }
+  }
+});
+
+canvas.addEventListener("mousemove", (e) => {
+  if (gameOver || aiThinking) { hoverPos = null; draw(); return; }
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvasSize / rect.width;
+  const scaleY = canvasSize / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const c = fromPixel(mx), r = fromPixel(my);
+  if (r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE && board[r][c] === 0) {
+    hoverPos = {r, c};
+  } else { hoverPos = null; }
+  draw();
+});
+
+canvas.addEventListener("mouseleave", () => { hoverPos = null; draw(); });
+
+document.getElementById("btnRestart").addEventListener("click", () => { initBoard(); hideOverlay(); });
+btnUndo.addEventListener("click", undo);
+btnMode.addEventListener("click", () => {
+  mode = mode === "pvp" ? "ai" : "pvp";
+  initBoard(); hideOverlay();
+});
+
+diffGroup.querySelectorAll("button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    diffGroup.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    aiDifficulty = btn.dataset.level;
+    if (mode === "ai") { initBoard(); hideOverlay(); }
+  });
+});
+
+document.getElementById("btnPlayAgain").addEventListener("click", () => { initBoard(); hideOverlay(); });
+document.getElementById("btnCloseOverlay").addEventListener("click", hideOverlay);
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key === "z") { e.preventDefault(); if (!btnUndo.disabled) undo(); }
+  if (e.key === "r" && !e.ctrlKey && !e.metaKey && e.target === document.body) { initBoard(); hideOverlay(); }
+});
+
+initBoard();
+
+</script>
+</body>
+</html>

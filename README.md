@@ -14,7 +14,7 @@
 
 ## 预览
 
-![棋盘截图](screenshot.png)
+![Uploading 屏幕截图 2026-06-17 002621.png…]()
 
 在线试玩 → [**zore7.github.io/gomoku**](https://zore7.github.io/gomoku/)
 
